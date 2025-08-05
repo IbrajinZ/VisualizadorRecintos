@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador de Recintos Electorales - Santa Cruz</title>
+
+    <!-- LeafletJS CSS para el mapa -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <!-- Tailwind CSS para estilos -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        /* Estilo para el contenedor del mapa */
+        #map { 
+            height: 70vh; 
+            width: 100%;
+        }
+        /* Asegurar que los popups del mapa no se vean afectados por los estilos de Tailwind */
+        .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+            background-color: white;
+            color: #333;
+            box-shadow: 0 3px 14px rgba(0,0,0,0.4);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <div class="bg-white rounded-lg shadow-xl p-6">
+            <div class="text-center mb-6">
+                <h1 class="text-3xl md:text-4xl font-bold text-gray-800">Visualizador de Recintos Electorales</h1>
+                <p class="text-gray-600 mt-2">Departamento de Santa Cruz, Bolivia</p>
+            </div>
+            
+            <div id="loading" class="text-center p-4 text-gray-600">Cargando datos desde el servidor...</div>
+
+            <!-- Controles de Filtro (inicialmente ocultos) -->
+            <div id="filter-controls" class="hidden flex-wrap gap-4 mb-6 p-4 bg-gray-50 rounded-lg border">
+                <div class="flex-grow">
+                    <label for="province-filter" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Provincia:</label>
+                    <select id="province-filter" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="todos">Todas las Provincias</option>
+                    </select>
+                </div>
+                <div class="flex-grow">
+                    <label for="circun-filter" class="block text-sm font-medium text-gray-700 mb-1">Filtrar por Circunscripción:</label>
+                    <select id="circun-filter" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                        <option value="todos">Todas las Circunscripciones</option>
+                    </select>
+                </div>
+                 <div class="flex-grow md:flex-grow-0 flex items-end">
+                    <button id="reset-filters" class="w-full bg-gray-600 text-white p-2 rounded-md hover:bg-gray-700 transition duration-300">Limpiar Filtros</button>
+                </div>
+            </div>
+
+            <!-- Contenedor del Mapa (inicialmente oculto) -->
+            <div id="map" class="hidden rounded-lg shadow-md border border-gray-200"></div>
+        </div>
+    </div>
+
+    <!-- SCRIPTS DE JAVASCRIPT -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    
+    <!-- Lógica principal de la aplicación -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            // --- CONFIGURACIÓN INICIAL ---
+            const mapElement = document.getElementById('map');
+            const loadingElement = document.getElementById('loading');
+            const filterControls = document.getElementById('filter-controls');
+            const provinceFilter = document.getElementById('province-filter');
+            const circunFilter = document.getElementById('circun-filter');
+            const resetButton = document.getElementById('reset-filters');
+            
+            const initialCoords = [-17.7833, -63.1833]; 
+            const initialZoom = 8;
+
+            let map;
+            let allData = [];
+            let markersLayer;
+
+            // --- CARGA DE DATOS DESDE EL BACKEND ---
+            async function loadData() {
+                try {
+                    // La llamada fetch ahora apunta a la API creada con Python
+                    const response = await fetch('/api/recintos');
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error || `Error del servidor: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    
+                    // Si los datos se cargan correctamente, inicializa el mapa
+                    initializeMap(data);
+
+                } catch (error) {
+                    loadingElement.innerText = `Error al cargar los datos: ${error.message}`;
+                    console.error("Error fetching data:", error);
+                }
+            }
+
+            function initializeMap(data) {
+                loadingElement.style.display = 'none';
+                mapElement.classList.remove('hidden');
+                filterControls.classList.remove('hidden');
+                filterControls.classList.add('flex');
+
+                allData = data;
+
+                map = L.map(mapElement).setView(initialCoords, initialZoom);
+                markersLayer = L.layerGroup().addTo(map);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                }).addTo(map);
+
+                populateFilters(allData);
+                plotMarkers(allData);
+            }
+
+            // --- FUNCIONES DE FILTRADO Y VISUALIZACIÓN ---
+            function populateFilters(data) {
+                const provinces = [...new Set(data.map(item => item.NomProv))].sort();
+                // CAMBIO: Se usa NroCircun para obtener los números de circunscripción
+                const circuns = [...new Set(data.map(item => item.NroCircun))].sort((a, b) => a - b); // Ordenar numéricamente
+
+                provinceFilter.innerHTML = '<option value="todos">Todas las Provincias</option>';
+                circunFilter.innerHTML = '<option value="todos">Todas las Circunscripciones</option>';
+
+                provinces.forEach(province => {
+                    const option = document.createElement('option');
+                    option.value = province;
+                    option.textContent = province;
+                    provinceFilter.appendChild(option);
+                });
+
+                circuns.forEach(circun => {
+                    const option = document.createElement('option');
+                    option.value = circun;
+                    option.textContent = `Circunscripción ${circun}`; // Texto más descriptivo
+                    circunFilter.appendChild(option);
+                });
+            }
+
+            function plotMarkers(data) {
+                markersLayer.clearLayers();
+
+                data.forEach(recinto => {
+                    const lat = parseFloat(recinto.latitud);
+                    const lon = parseFloat(recinto.longitud);
+
+                    if (!isNaN(lat) && !isNaN(lon)) {
+                        const marker = L.marker([lat, lon]);
+                        
+                        // CAMBIO: Se muestra NroCircun en la descripción del popup
+                        const popupContent = `
+                            <div class="text-sm">
+                                <strong class="text-base block mb-1">${recinto.NombreRecinto}</strong>
+                                <strong>Dirección:</strong> ${recinto.Direccion || 'No disponible'}<br>
+                                <strong>Municipio:</strong> ${recinto.NombreMunicipio}<br>
+                                <strong>Provincia:</strong> ${recinto.NomProv}<br>
+                                <strong>Circunscripción:</strong> ${recinto.NroCircun}<br>
+                                <strong>Tipo:</strong> ${recinto.descUrbanoRural}<br>
+                                <strong>Mesas:</strong> ${recinto.MaxMesasReci || 'N/A'}
+                            </div>
+                        `;
+                        
+                        marker.bindPopup(popupContent);
+                        markersLayer.addLayer(marker);
+                    }
+                });
+            }
+
+            function applyFilters() {
+                const selectedProvince = provinceFilter.value;
+                const selectedCircun = circunFilter.value;
+
+                let filteredData = allData;
+
+                if (selectedProvince !== 'todos') {
+                    filteredData = filteredData.filter(d => d.NomProv === selectedProvince);
+                }
+
+                if (selectedCircun !== 'todos') {
+                    // CAMBIO: Se filtra por la columna NroCircun
+                    // Se usa '==' para comparar el string del filtro con el número del dato
+                    filteredData = filteredData.filter(d => d.NroCircun == selectedCircun);
+                }
+
+                plotMarkers(filteredData);
+            }
+            
+            function resetAllFilters() {
+                provinceFilter.value = 'todos';
+                circunFilter.value = 'todos';
+                applyFilters();
+                map.setView(initialCoords, initialZoom);
+            }
+
+            // --- EVENT LISTENERS ---
+            provinceFilter.addEventListener('change', applyFilters);
+            circunFilter.addEventListener('change', applyFilters);
+            resetButton.addEventListener('click', resetAllFilters);
+
+            // Iniciar la carga de datos al cargar la página
+            loadData();
+        });
+    </script>
+
+</body>
+</html>
