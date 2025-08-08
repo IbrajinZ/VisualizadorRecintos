@@ -162,7 +162,8 @@
                                 <strong>Provincia:</strong> ${recinto.NomProv}<br>
                                 <strong>Circunscripción:</strong> ${recinto.NroCircun}<br>
                                 <strong>Tipo:</strong> ${recinto.descUrbanoRural}<br>
-                                <strong>Mesas:</strong> ${recinto.MaxMesasReci || 'N/A'}
+                                <strong>Mesas:</strong> ${recinto['Cantidad Mesas'] || 'N/A'}
+                                <strong>Votantes Habilitados:</strong> ${recinto.Habilitados || 'N/A'}
                             </div>
                         `;
                         
@@ -210,3 +211,4 @@
 
 </body>
 </html>
+
