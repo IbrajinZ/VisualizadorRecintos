@@ -15,20 +15,22 @@ def get_recintos():
     """
     try:
         # La ruta al archivo CSV. Debe estar en la misma carpeta que app.py
-        csv_path = 'GeoRecintos_Scz.csv'
+        csv_path = 'GeoRecintos_Scz.xlsx - Hoja1.csv'
         if not os.path.exists(csv_path):
             return jsonify({"error": "El archivo CSV no se encontró en el servidor."}), 404
 
-        # Leer los datos usando pandas
-        df = pd.read_csv(csv_path)
+        # --- CORRECCIÓN IMPORTANTE ---
+        # Leer los datos usando pandas, especificando el encoding a UTF-8.
+        # Esto asegura que los caracteres especiales se lean correctamente.
+        df = pd.read_csv(csv_path, encoding='utf-8')
+
+        # Limpia los espacios en blanco al inicio y final de los nombres de las columnas.
+        df.columns = df.columns.str.strip()
 
         # Filtrar filas que no tengan latitud o longitud
         df.dropna(subset=['latitud', 'longitud'], inplace=True)
         
-        # --- CORRECCIÓN IMPORTANTE ---
-        # Reemplazar los valores NaN (Not a Number) de pandas por None.
-        # Python 'None' se convierte correctamente a 'null' en JSON, que es un valor válido.
-        # Esto evita el error "Unexpected token N" en el frontend.
+        # Reemplazar los valores NaN (Not a Number) de pandas por None (null en JSON).
         df = df.astype(object).where(pd.notnull(df), None)
         
         # Convertir el DataFrame a una lista de diccionarios (JSON)
@@ -54,4 +56,6 @@ def index():
 
 if __name__ == '__main__':
     # Ejecuta la aplicación en modo de depuración para facilitar el desarrollo
+    app.run(debug=True)
+    
     app.run(debug=True)
