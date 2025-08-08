@@ -15,7 +15,7 @@ def get_recintos():
     """
     try:
         # La ruta al archivo CSV. Debe estar en la misma carpeta que app.py
-        csv_path = 'GeoRecintos_Scz.xlsx - Hoja1.csv'
+        csv_path = 'GeoRecintos_Scz.csv'
         if not os.path.exists(csv_path):
             return jsonify({"error": "El archivo CSV no se encontró en el servidor."}), 404
 
@@ -59,3 +59,4 @@ if __name__ == '__main__':
     app.run(debug=True)
     
     app.run(debug=True)
+
